@@ -18,8 +18,8 @@
 //
 // NYILATKOZAT
 // ---------------------------------------------------------------------------------------------
-// Nev    : 
-// Neptun : 
+// Nev    : Meglécz Máté
+// Neptun : A7RBKU
 // ---------------------------------------------------------------------------------------------
 // ezennel kijelentem, hogy a feladatot magam keszitettem, es ha barmilyen segitseget igenybe vettem vagy
 // mas szellemi termeket felhasznaltam, akkor a forrast es az atvett reszt kommentekben egyertelmuen jeloltem.
@@ -64,11 +64,6 @@ static const double FULLNESS = 0.05;
 
 static const int NUM_OF_LINES = round(NUM_OF_VERTICES * (NUM_OF_VERTICES - 1) / 2 * FULLNESS);
 
-class Vertex {
-public:
-	vec3 v;
-};
-
 class Line {
 public:
 	vec3* vertex1;
@@ -88,6 +83,12 @@ public:
 	std::vector<Line> lines;
 };
 
+class MouseClick {
+public:
+	float x;
+	float y;
+};
+
 GPUProgram gpuProgram; // vertex and fragment shaders
 unsigned int vaoVertices;	   // virtual world on the GPU
 unsigned int vboVertices;		// vertex buffer object
@@ -95,6 +96,7 @@ unsigned int vaoLines;
 unsigned int vboLines;
 
 Graph graph;
+MouseClick mouseClick;
 
 // Initialization, create an OpenGL context
 void onInitialization() {
@@ -130,10 +132,7 @@ void onInitialization() {
 		bool success = false;
 		while (!success) {
 			int randidx = rand() % (NUM_OF_VERTICES * (NUM_OF_VERTICES - 1) / 2);
-			//printf("%d\n", randidx);
 			if (!graph.lines[randidx].used) {
-				//lines.push_back(graph.lines[randidx].vertex1);
-				//lines.push_back(graph.lines[randidx].vertex2);
 				graph.lines[randidx].used = true;
 				success = true;
 			}
@@ -215,14 +214,95 @@ void onDisplay() {
 	int location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
 	glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
 
-	drawGraph();
+	drawGraph(); // gráf rajzolása
 
 	glutSwapBuffers(); // exchange buffers for double buffering
 }
 
+void KMeans() {
+	for (size_t i = 0; i < NUM_OF_VERTICES; i++)
+	{
+		vec3 center= vec3(0, 0, 0);
+
+		for (size_t j = 0; j < NUM_OF_VERTICES; j++)
+		{
+			if (i != j) {
+				vec3 nextV = graph.vertices[j];
+				bool neighbour = false;
+				for (size_t z = 0; z < graph.lines.size(); z++)
+				{
+					if (((graph.lines[z].vertex1 == &graph.vertices[i] && graph.lines[z].vertex2 == &graph.vertices[j])
+						|| (graph.lines[z].vertex1 == &graph.vertices[j] && graph.lines[z].vertex2 == &graph.vertices[i])) && graph.lines[z].used) {
+						neighbour = true;
+						break;
+					}
+				}
+
+				if (neighbour) {
+					center = center + nextV/nextV.z;
+				}
+				else center = center - nextV / nextV.z;
+				//printf("%lf, %lf, %lf = %lf\n", graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
+			}
+		}
+		center = center / (NUM_OF_VERTICES - 1);
+		center = center / sqrt(1 - center.x * center.x - center.y * center.y);
+
+		graph.vertices[i] = center;
+	}
+}
+
+float distanceHyper(vec3 p, vec3 q) {
+	return acosh((-1)*(p.x*q.x + p.y*q.y - p.z*q.z));
+}
+
+vec3 vSectionHyper(vec3 p, vec3 r, float dist) {
+	return (r - p * cosh(dist)) / sinh(dist);
+}
+
+vec3 rSectionHyper(vec3 p, vec3 v, float dist) {
+	return (p * cosh(dist) + v * sinh(dist));
+}
+
+vec3 mirrorHyper(vec3 p, vec3 m) {
+	float dist = distanceHyper(p, m);
+	vec3 v = vSectionHyper(p, m, dist);
+	return rSectionHyper(p, v, 2 * dist);
+}
+
+void graphMove(float cx, float cy) {
+	if (cx != mouseClick.x || cy != mouseClick.y) {
+		float x = (cx - mouseClick.x);
+		float y = (cy - mouseClick.y);
+		
+		float w = sqrt(1 - x * x - y * y);
+		vec3 moveVec = vec3(x / w, y / w, 1 / w);
+		//printf("%lf, %lf, %lf\t = %lf\n", moveVec.x, moveVec.y, moveVec.z);
+		vec3 p = vec3(0, 0, 1);
+
+
+		float dist = distanceHyper(p, moveVec);
+		vec3 v = vSectionHyper(p, moveVec, dist);
+
+		//m1 point
+		vec3 m1 = p * cosh(dist / 4) + v * sinh(dist / 4);
+		//m2 point
+		vec3 m2 = p * cosh(dist * 3 / 4) + v * sinh(dist * 3 / 4);
+
+		for (size_t i = 0; i < NUM_OF_VERTICES; i++)
+		{
+			graph.vertices[i] = mirrorHyper(graph.vertices[i], m1);
+			graph.vertices[i] = mirrorHyper(graph.vertices[i], m2);
+			//pintf("%lf, %lf, %lf\t = %lf\n", graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
+		}
+	}
+}
+
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
+	if (key == 'd') {
+		KMeans();
+	} glutPostRedisplay();         // if d, invalidate display, i.e. redraw
 }
 
 // Key of ASCII code released
@@ -234,7 +314,12 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	// Convert to normalized device space
 	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 	float cY = 1.0f - 2.0f * pY / windowHeight;
-	printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
+	graphMove(cX, cY);
+	mouseClick.x = cX;
+	mouseClick.y = cY;
+	
+	//printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
+	glutPostRedisplay();
 }
 
 // Mouse click event
@@ -242,6 +327,9 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	// Convert to normalized device space
 	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 	float cY = 1.0f - 2.0f * pY / windowHeight;
+
+	mouseClick.x = cX;
+	mouseClick.y = cY;
 
 	char * buttonStat;
 	switch (state) {
