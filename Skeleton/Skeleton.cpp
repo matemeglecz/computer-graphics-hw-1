@@ -158,7 +158,7 @@ void drawPoints() {
 		0, NULL); 		     // stride, offset: tightly packed
 
 	glBindVertexArray(vaoVertices);  // Draw call
-	glDrawArrays(GL_POINTS, 0 /*startIdx*/, NUM_OF_LINES /*# Elements*/);
+	glDrawArrays(GL_POINTS, 0 /*startIdx*/, NUM_OF_VERTICES /*# Elements*/);
 }
 
 void drawLines() {
@@ -191,7 +191,7 @@ void drawLines() {
 void drawGraph() {
 	// Set color to (0, 1, 0) = green
 	int color = glGetUniformLocation(gpuProgram.getId(), "color");
-	glUniform3f(color, 0.0f, 1.0f, 0.0f); // 3 floats
+	glUniform3f(color, 1.0f, 0.0f, 1.0f); // 3 floats
 	drawPoints();
 
 	glUniform3f(color, 1.0f, 1.0f, 0.0f); //lines are yellow
@@ -202,7 +202,7 @@ void drawGraph() {
 
 // Window has become invalid: Redraw
 void onDisplay() {
-	glPointSize(7.0f);
+	glPointSize(8.0f);
 	glClearColor(0, 0, 0, 0);     // background color
 	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
 
@@ -219,36 +219,46 @@ void onDisplay() {
 	glutSwapBuffers(); // exchange buffers for double buffering
 }
 
-void KMeans() {
-	for (size_t i = 0; i < NUM_OF_VERTICES; i++)
-	{
+void KMeans() { //ennek kell még valami hogy többször is lehessen egy más után szóval ha valahol FLT_MIN alá megy valami akkor inkább ne is történjen semmi
+	std::vector<vec3> newPoints;
+
+	for (size_t i = 0; i < NUM_OF_VERTICES; i++){
 		vec3 center= vec3(0, 0, 0);
 
-		for (size_t j = 0; j < NUM_OF_VERTICES; j++)
-		{
+		for (size_t j = 0; j < NUM_OF_VERTICES; j++){
 			if (i != j) {
 				vec3 nextV = graph.vertices[j];
 				bool neighbour = false;
-				for (size_t z = 0; z < graph.lines.size(); z++)
-				{
+				for (size_t z = 0; z < graph.lines.size(); z++){
 					if (((graph.lines[z].vertex1 == &graph.vertices[i] && graph.lines[z].vertex2 == &graph.vertices[j])
 						|| (graph.lines[z].vertex1 == &graph.vertices[j] && graph.lines[z].vertex2 == &graph.vertices[i])) && graph.lines[z].used) {
 						neighbour = true;
 						break;
 					}
 				}
-
 				if (neighbour) {
-					center = center + nextV/nextV.z;
+					center = center + (nextV/nextV.z);
 				}
-				else center = center - nextV / nextV.z;
-				//printf("%lf, %lf, %lf = %lf\n", graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
+				else center = center - (nextV / nextV.z);
 			}
 		}
+		//printf("%lf\n", center.z);
 		center = center / (NUM_OF_VERTICES - 1);
+		center.z = 1;
+		if (!(abs(center.x) >= FLT_MIN) || !(abs(center.y) >= FLT_MIN)) {
+			printf("problem\n");
+		}
 		center = center / sqrt(1 - center.x * center.x - center.y * center.y);
+		
 
-		graph.vertices[i] = center;
+		//graph.vertices[i] = center;
+		newPoints.push_back(center);
+		//printf("%lf, %lf, %lf = %lf\n", center.x, center.y, center.z, (center.x * center.x + center.y * center.y - center.z * center.z));
+	}
+	for (size_t i = 0; i < NUM_OF_VERTICES; i++){
+		if (abs(newPoints[i].x) >= FLT_MIN && abs(newPoints[i].y) >= FLT_MIN && abs(newPoints[i].z) >= FLT_MIN) {
+			graph.vertices[i] = newPoints[i];
+		}
 	}
 }
 
@@ -271,12 +281,21 @@ vec3 mirrorHyper(vec3 p, vec3 m) {
 }
 
 void graphMove(float cx, float cy) {
-	if (cx != mouseClick.x || cy != mouseClick.y) {
-		float x = (cx - mouseClick.x);
-		float y = (cy - mouseClick.y);
-		
+	float x = (cx - mouseClick.x);
+	float y = (cy - mouseClick.y);
+	if ((cx != mouseClick.x || cy != mouseClick.y) && abs(x) > FLT_MIN && abs(y) > FLT_MIN) {
+		mouseClick.x = cx;
+		mouseClick.y = cy;
+
 		float w = sqrt(1 - x * x - y * y);
 		vec3 moveVec = vec3(x / w, y / w, 1 / w);
+
+		if (x < FLT_MIN || y < FLT_MIN) {
+			printf("problem\n");
+
+		}
+
+		//printf("%lf", FLT_MIN);
 		//printf("%lf, %lf, %lf\t = %lf\n", moveVec.x, moveVec.y, moveVec.z);
 		vec3 p = vec3(0, 0, 1);
 
@@ -293,7 +312,7 @@ void graphMove(float cx, float cy) {
 		{
 			graph.vertices[i] = mirrorHyper(graph.vertices[i], m1);
 			graph.vertices[i] = mirrorHyper(graph.vertices[i], m2);
-			//pintf("%lf, %lf, %lf\t = %lf\n", graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
+			//printf("%lf, %lf, %lf\t = %lf\n", graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
 		}
 	}
 }
@@ -315,8 +334,7 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 	float cY = 1.0f - 2.0f * pY / windowHeight;
 	graphMove(cX, cY);
-	mouseClick.x = cX;
-	mouseClick.y = cY;
+	
 	
 	//printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
 	glutPostRedisplay();
