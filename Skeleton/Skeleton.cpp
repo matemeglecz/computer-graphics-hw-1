@@ -95,6 +95,7 @@ unsigned int vboVertices;		// vertex buffer object
 unsigned int vaoLines;
 unsigned int vboLines;
 
+int pressedButton;
 Graph graph;
 MouseClick mouseClick;
 
@@ -250,7 +251,6 @@ void KMeans() { //ennek kell még valami hogy többször is lehessen egy más után s
 		}
 		center = center / sqrt(1 - center.x * center.x - center.y * center.y);
 		
-
 		//graph.vertices[i] = center;
 		newPoints.push_back(center);
 		//printf("%lf, %lf, %lf = %lf\n", center.x, center.y, center.z, (center.x * center.x + center.y * center.y - center.z * center.z));
@@ -281,6 +281,7 @@ vec3 mirrorHyper(vec3 p, vec3 m) {
 }
 
 void graphMove(float cx, float cy) {
+	if (pressedButton != GLUT_RIGHT_BUTTON) return;
 	float x = (cx - mouseClick.x);
 	float y = (cy - mouseClick.y);
 	if ((cx != mouseClick.x || cy != mouseClick.y) && abs(x) > FLT_MIN && abs(y) > FLT_MIN) {
@@ -290,15 +291,13 @@ void graphMove(float cx, float cy) {
 		float w = sqrt(1 - x * x - y * y);
 		vec3 moveVec = vec3(x / w, y / w, 1 / w);
 
-		if (x < FLT_MIN || y < FLT_MIN) {
+		if (abs(x) < FLT_MIN || abs(y) < FLT_MIN) {
 			printf("problem\n");
-
 		}
 
 		//printf("%lf", FLT_MIN);
 		//printf("%lf, %lf, %lf\t = %lf\n", moveVec.x, moveVec.y, moveVec.z);
 		vec3 p = vec3(0, 0, 1);
-
 
 		float dist = distanceHyper(p, moveVec);
 		vec3 v = vSectionHyper(p, moveVec, dist);
@@ -310,8 +309,23 @@ void graphMove(float cx, float cy) {
 
 		for (size_t i = 0; i < NUM_OF_VERTICES; i++)
 		{
+			//vec3 temp = graph.vertices[i];
+			/*if (abs(temp.x) <= 0.0001000 || abs(temp.y) <= 0.0001000) {
+				printf("baj0\n");
+				printf("%d. %lf, %lf, %lf\t = %lf\n", i, graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
+			}*/
+				
 			graph.vertices[i] = mirrorHyper(graph.vertices[i], m1);
 			graph.vertices[i] = mirrorHyper(graph.vertices[i], m2);
+			//printf("%d. %lf, %lf, %lf\t = %lf\n", i, graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
+			/*temp = mirrorHyper(temp, m1);
+			temp = mirrorHyper(temp, m2);
+
+			if (!(abs(temp.x) < FLT_MIN || abs(temp.y) < FLT_MIN || abs(temp.z) < FLT_MIN))
+				graph.vertices[i] = temp;
+			else printf("baj\n");*/
+
+
 			//printf("%lf, %lf, %lf\t = %lf\n", graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
 		}
 	}
@@ -319,7 +333,7 @@ void graphMove(float cx, float cy) {
 
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == 'd') {
+	if (key == ' ') {
 		KMeans();
 	} glutPostRedisplay();         // if d, invalidate display, i.e. redraw
 }
@@ -354,6 +368,7 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	case GLUT_DOWN: buttonStat = "pressed"; break;
 	case GLUT_UP:   buttonStat = "released"; break;
 	}
+	pressedButton = button;
 
 	switch (button) {
 	case GLUT_LEFT_BUTTON:   printf("Left button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);   break;
