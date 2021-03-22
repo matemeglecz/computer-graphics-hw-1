@@ -59,10 +59,10 @@ const char * const fragmentSource = R"(
 	}
 )";
 
-static const int NUM_OF_VERTICES = 50;
+static const int VERTICES_NUM = 50;
 static const double FULLNESS = 0.05;
 
-static const int NUM_OF_LINES = round(NUM_OF_VERTICES * (NUM_OF_VERTICES - 1) / 2 * FULLNESS);
+static const int LINES_NUM = round(VERTICES_NUM * (VERTICES_NUM - 1) / 2 * FULLNESS);
 
 class Line {
 public:
@@ -80,13 +80,8 @@ public:
 class Graph {
 public:
 	std::vector<vec3> vertices;
+	std::vector<vec3> verticesV;
 	std::vector<Line> lines;
-};
-
-class MouseClick {
-public:
-	float x;
-	float y;
 };
 
 GPUProgram gpuProgram; // vertex and fragment shaders
@@ -97,7 +92,7 @@ unsigned int vboLines;
 
 int pressedButton;
 Graph graph;
-MouseClick mouseClick;
+vec2 vectorStart;
 
 // Initialization, create an OpenGL context
 void onInitialization() {
@@ -109,11 +104,11 @@ void onInitialization() {
 	glGenVertexArrays(1, &vaoVertices);	// get 1 vao id
 	glGenBuffers(1, &vboVertices);	// Generate 1 buffer
 	
-
+	graph = Graph();
 	// Geometry with 24 bytes (6 floats or 3 x 2 coordinates)
 
-	
-	for (int i = 0; i < NUM_OF_VERTICES; i++) {
+
+	for (int i = 0; i < VERTICES_NUM; i++) {
 		float x = ((((float)(rand() * 2) ) / (RAND_MAX))- 1.0f)*1.5;
 		float y = ((((float)(rand() * 2)) / (RAND_MAX)) - 1.0f)*1.5;
 		
@@ -123,21 +118,25 @@ void onInitialization() {
 	
 
 	//lines generate
-	for (int i = 0; i < NUM_OF_VERTICES; i++) {
+	for (int i = 0; i < VERTICES_NUM; i++) {
 		for (int j = 0; j < i; j++) {
 			graph.lines.push_back(Line(&graph.vertices[i], &graph.vertices[j]));
 		}
 	}
 
-	for (int i = 0; i < NUM_OF_LINES; i++) {
+	for (int i = 0; i < LINES_NUM; i++) {
 		bool success = false;
 		while (!success) {
-			int randidx = rand() % (NUM_OF_VERTICES * (NUM_OF_VERTICES - 1) / 2);
+			int randidx = rand() % (VERTICES_NUM * (VERTICES_NUM - 1) / 2);
 			if (!graph.lines[randidx].used) {
 				graph.lines[randidx].used = true;
 				success = true;
 			}
 		}
+	}
+
+	for (int i = 0; i < VERTICES_NUM; i++) {
+		graph.verticesV.push_back(vec3(0, 0, 0));
 	}
 
 	// create program for the GPU
@@ -159,7 +158,7 @@ void drawPoints() {
 		0, NULL); 		     // stride, offset: tightly packed
 
 	glBindVertexArray(vaoVertices);  // Draw call
-	glDrawArrays(GL_POINTS, 0 /*startIdx*/, NUM_OF_VERTICES /*# Elements*/);
+	glDrawArrays(GL_POINTS, 0 /*startIdx*/, VERTICES_NUM /*# Elements*/);
 }
 
 void drawLines() {
@@ -186,7 +185,7 @@ void drawLines() {
 		0, NULL); 		     // stride, offset: tightly packed
 
 	glBindVertexArray(vaoLines);  // Draw call
-	glDrawArrays(GL_LINES, 0 /*startIdx*/, NUM_OF_LINES * 2 /*# Elements*/);
+	glDrawArrays(GL_LINES, 0 /*startIdx*/, LINES_NUM * 2 /*# Elements*/);
 }
 
 void drawGraph() {
@@ -197,8 +196,6 @@ void drawGraph() {
 
 	glUniform3f(color, 1.0f, 1.0f, 0.0f); //lines are yellow
 	drawLines();
-
-	
 }
 
 // Window has become invalid: Redraw
@@ -221,12 +218,12 @@ void onDisplay() {
 }
 
 void KMeans() { //ennek kell még valami hogy többször is lehessen egy más után szóval ha valahol FLT_MIN alá megy valami akkor inkább ne is történjen semmi
-	std::vector<vec3> newPoints;
+	//std::vector<vec3> newPoints;
 
-	for (size_t i = 0; i < NUM_OF_VERTICES; i++){
+	for (size_t i = 0; i < VERTICES_NUM; i++){
 		vec3 center= vec3(0, 0, 0);
 
-		for (size_t j = 0; j < NUM_OF_VERTICES; j++){
+		for (size_t j = 0; j < VERTICES_NUM; j++){
 			if (i != j) {
 				vec3 nextV = graph.vertices[j];
 				bool neighbour = false;
@@ -244,7 +241,7 @@ void KMeans() { //ennek kell még valami hogy többször is lehessen egy más után s
 			}
 		}
 		//printf("%lf\n", center.z);
-		center = center / (NUM_OF_VERTICES - 1);
+		center = center / (VERTICES_NUM - 1);
 		center.z = 1;
 		if (!(abs(center.x) >= FLT_MIN) || !(abs(center.y) >= FLT_MIN)) {
 			printf("problem\n");
@@ -252,17 +249,22 @@ void KMeans() { //ennek kell még valami hogy többször is lehessen egy más után s
 		center = center / sqrt(1 - center.x * center.x - center.y * center.y);
 		
 		//graph.vertices[i] = center;
-		newPoints.push_back(center);
+		//newPoints.push_back(center);
+		if (abs(center.x) >= FLT_MIN && abs(center.y) >= FLT_MIN && abs(center.z) >= FLT_MIN) {
+			graph.vertices[i] = center;
+		}
 		//printf("%lf, %lf, %lf = %lf\n", center.x, center.y, center.z, (center.x * center.x + center.y * center.y - center.z * center.z));
 	}
-	for (size_t i = 0; i < NUM_OF_VERTICES; i++){
+	/*for (size_t i = 0; i < VERTICES_NUM; i++){
 		if (abs(newPoints[i].x) >= FLT_MIN && abs(newPoints[i].y) >= FLT_MIN && abs(newPoints[i].z) >= FLT_MIN) {
 			graph.vertices[i] = newPoints[i];
 		}
-	}
+	}*/
 }
 
 float distanceHyper(vec3 p, vec3 q) {
+	//printf("%lf, %lf\n", q.x, p.x);
+	//printf("%lf\n", p.x * q.x + p.y * q.y - p.z * q.z);
 	return acosh((-1)*(p.x*q.x + p.y*q.y - p.z*q.z));
 }
 
@@ -282,11 +284,11 @@ vec3 mirrorHyper(vec3 p, vec3 m) {
 
 void graphMove(float cx, float cy) {
 	if (pressedButton != GLUT_RIGHT_BUTTON) return;
-	float x = (cx - mouseClick.x);
-	float y = (cy - mouseClick.y);
-	if ((cx != mouseClick.x || cy != mouseClick.y) && abs(x) > FLT_MIN && abs(y) > FLT_MIN) {
-		mouseClick.x = cx;
-		mouseClick.y = cy;
+	float x = (cx - vectorStart.x);
+	float y = (cy - vectorStart.y);
+	if ((cx != vectorStart.x || cy != vectorStart.y) && abs(x) > FLT_MIN && abs(y) > FLT_MIN) {
+		vectorStart.x = cx;
+		vectorStart.y = cy;
 
 		float w = sqrt(1 - x * x - y * y);
 		vec3 moveVec = vec3(x / w, y / w, 1 / w);
@@ -307,7 +309,7 @@ void graphMove(float cx, float cy) {
 		//m2 point
 		vec3 m2 = p * cosh(dist * 3 / 4) + v * sinh(dist * 3 / 4);
 
-		for (size_t i = 0; i < NUM_OF_VERTICES; i++)
+		for (size_t i = 0; i < VERTICES_NUM; i++)
 		{
 			//vec3 temp = graph.vertices[i];
 			/*if (abs(temp.x) <= 0.0001000 || abs(temp.y) <= 0.0001000) {
@@ -331,11 +333,184 @@ void graphMove(float cx, float cy) {
 	}
 }
 
+vec3 Fe(float dist, vec3 startP, vec3 endP) {
+	float F;
+	vec3 vecF;
+	/*if (dist <= 0.005) {
+		F = -5.3;
+		//vecF = vSectionHyper(endP, startP, dist);
+	}else if (dist > 1) {
+		F=pow((dist - 1), 2) * 0.01;
+		//vecF = vSectionHyper(startP, endP,dist);
+	} else {
+		F=((-1) * pow(log(dist), 2));
+		//vecF = vSectionHyper(startP, endP, dist);
+	}*/
+	F = pow((dist - 0.2), 5) * 5000;
+	vecF = vSectionHyper(startP, endP, dist);
+	//printf("dist: %lf %lf %lf %lf \n",dist, vecF.x, vecF.y, vecF.z);
+	vecF = vecF * F;
+	return vecF;
+}
+
+vec3 Fn(float dist, vec3 startP, vec3 endP) {
+	float F;
+	vec3 vecF;
+	/*if (dist <= 0.0008) {
+		F = -4;
+	} else if (dist >= 7.5) {
+		F = 0;
+	} else F = log(dist) - 0.9;*/
+	F =  0.1*log2(dist) - 0.2;
+	if (F > 0) F = 0;
+	if (F < -50) F = -50;
+	vecF= vSectionHyper(startP, endP, dist);
+	vecF = vecF * F;
+	return vecF;
+}
+
+vec3 Fo(vec3 startP) {
+	float F;
+	vec3 vecF;
+	float dist = distanceHyper(startP, vec3(0, 0, 1));
+	if (!(dist > FLT_MIN)) {
+		dist = 0.0f;
+		printf("kicsi\n");
+		return vec3(0, 0, 0);
+	}
+	printf("%lf\n", dist);
+	
+	if (dist >= 2) {
+		F = 8;
+	} else F = (dist-0.1)*4;
+	F = dist * 500;
+	vecF = vSectionHyper(startP, vec3(0, 0, 1), dist);
+	vecF=vecF* F;
+	//vecF = normalize(vecF);
+	printf("vecF: %lf %lf %lf\n", vecF.x ,vecF.y, vecF.z);
+	return vecF;
+}
+
+
+long startTime = 0;
+long previousTime;
+bool newStartTime=false;
+bool firstStart = false;
+
+void dinSim(double dt) {
+	//vec3 ri;
+	for (int i = 0; i < VERTICES_NUM; i++) {
+		vec3 vi = graph.verticesV[i];
+		//vi = vec3(0, 0, 0);
+		printf("...............................................\n");
+		printf("[%d]. %f, %f, %f\n", i, vi.x, vi.y, vi.z);
+		
+		vec3 Fi = vec3(0,0,0);
+		printf("Fi: [%d]. %f, %f, %f\n", i, Fi.x, Fi.y, Fi.z);
+		for (int j = 0; j < VERTICES_NUM; j++) {
+			if (i != j) {
+				for (size_t z = 0; z < graph.lines.size(); z++) {
+					if (((graph.lines[z].vertex1 == &graph.vertices[i] && graph.lines[z].vertex2 == &graph.vertices[j])
+						|| (graph.lines[z].vertex1 == &graph.vertices[j] && graph.lines[z].vertex2 == &graph.vertices[i]))) {
+
+						if (graph.lines[z].used) {
+							vec3 newF = Fe(distanceHyper(graph.vertices[i], graph.vertices[j]), graph.vertices[i], graph.vertices[j]);
+							//printf("%lf, %lf, %lf\n",  newF.x, newF.y, newF.z);
+							if (abs(newF.x) > FLT_MIN && abs(newF.y) > FLT_MIN && abs(newF.z) > FLT_MIN) {
+								Fi = Fi + newF;
+							}
+						}
+						else { 
+							vec3 newF = Fn(distanceHyper(graph.vertices[i], graph.vertices[j]), graph.vertices[i], graph.vertices[j]);
+							//printf("%lf, %lf, %lf\n", newF.x, newF.y, newF.z);
+							if (abs(newF.x) > FLT_MIN && abs(newF.y) > FLT_MIN && abs(newF.z) > FLT_MIN) {
+								Fi = Fi + newF;
+							} 
+						}
+					}
+				}
+			}
+		}
+		//if (length(vi) < FLT_MIN) vi = vec3(0, 0, 0);
+		//printf("%lf %lf %lf \n", vi.x, vi.y, vi.z);
+		Fi = Fi + Fo(graph.vertices[i]);
+
+		vec3 frictionF = vi * 0.0001;
+		if(length(frictionF) > FLT_MIN) Fi = Fi - vi * 0.0001;
+
+
+		printf("%lf %lf %lf \n", Fi.x, Fi.y, Fi.z);
+		printf("dt: %lf %lf %lf \n", Fi.x*dt, Fi.y*dt, Fi.z*dt);
+		printf("vi elott: %lf %lf %lf \n", vi.x, vi.y, vi.z);
+		Fi = normalize(Fi);
+
+		if (abs(Fi.x * dt) >= FLT_MIN && abs(Fi.y * dt) >= FLT_MIN && abs(Fi.z * dt) >= FLT_MIN) {
+			if (abs(vi.x) < FLT_MIN || abs(vi.y) < FLT_MIN || abs(vi.z) < FLT_MIN) {
+				printf("baj\n");
+				vi = Fi * dt;
+				vi = normalize(vi);
+			}
+			else {
+				vi = vi + Fi * dt;
+				vi = normalize(vi);
+				printf("x\n");
+			}
+		}
+		else if (abs(vi.x) < FLT_MIN || abs(vi.y) < FLT_MIN || abs(vi.z) < FLT_MIN) {
+			printf("baj2\n");
+			vi.x = 0;
+			vi.y = 0;
+			vi.z = 0;
+			
+		}
+		
+
+
+		printf("vi utan: %lf %lf %lf \n", vi.x, vi.y, vi.z);
+		
+		float viLength = length(vi);
+		printf("viL: %lf\n", viLength);
+		float dist = viLength*dt;
+		//printf("%lf\n", dist);
+		if (!(dist > FLT_MIN)) {
+			//graph.verticesV[i] = vec3(0,0,0);
+			graph.verticesV[i] = vi;
+			//printf("%lf\n", dist);
+			continue;
+		} 
+		printf("%lf\n", dist);
+		
+
+		
+		vec3 newPos =rSectionHyper(graph.vertices[i], vi, dist);
+		newPos.z = sqrt(1 + newPos.x * newPos.x + newPos.y * newPos.y);
+		printf("Newpos: %lf %lf %lf = %lf\n", newPos.x, newPos.y, newPos.z, newPos.x* newPos.x + newPos.y* newPos.y - newPos.z* newPos.z);
+		printf("---------------------------------------------------------------------\n");
+		
+
+		if (abs(newPos.x) > FLT_MIN && abs(newPos.y) > FLT_MIN && abs(newPos.z) > FLT_MIN) {
+			printf("siker\n");
+			vec3 sectionPoint = rSectionHyper(graph.vertices[i], vi, dist*2);
+			graph.vertices[i] = newPos;
+			vec3 newV = vSectionHyper(newPos, sectionPoint, distanceHyper(newPos, sectionPoint)) * viLength;
+			if (abs(newV.x) > FLT_MIN && abs(newV.y) > FLT_MIN && abs(newV.z) > FLT_MIN){
+				graph.verticesV[i] = newV;
+			}
+			else graph.verticesV[i] = vec3(0, 0, 0);
+		}
+
+		glutPostRedisplay();
+	}
+}
+
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == ' ') {
 		KMeans();
-	} glutPostRedisplay();         // if d, invalidate display, i.e. redraw
+		glutPostRedisplay();
+		newStartTime = true;
+		firstStart = true;
+	}          // if d, invalidate display, i.e. redraw
 }
 
 // Key of ASCII code released
@@ -360,8 +535,8 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 	float cY = 1.0f - 2.0f * pY / windowHeight;
 
-	mouseClick.x = cX;
-	mouseClick.y = cY;
+	vectorStart.x = cX;
+	vectorStart.y = cY;
 
 	char * buttonStat;
 	switch (state) {
@@ -377,7 +552,24 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	}
 }
 
+
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	if (newStartTime) {
+		startTime = time;
+		newStartTime = false;
+		previousTime = time;
+		return;
+	}
+
+	//dinSim(time - previousTime);
+	double T = 3000;
+	if (time < startTime+T && firstStart) {
+		double dt = (time - previousTime) / (double)100;
+		dinSim(dt);
+		previousTime = time;
+		glutPostRedisplay();
+	}
+
 }
