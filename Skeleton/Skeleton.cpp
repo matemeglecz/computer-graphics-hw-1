@@ -336,17 +336,8 @@ void graphMove(float cx, float cy) {
 vec3 Fe(float dist, vec3 startP, vec3 endP) {
 	float F;
 	vec3 vecF;
-	/*if (dist <= 0.005) {
-		F = -5.3;
-		//vecF = vSectionHyper(endP, startP, dist);
-	}else if (dist > 1) {
-		F=pow((dist - 1), 2) * 0.01;
-		//vecF = vSectionHyper(startP, endP,dist);
-	} else {
-		F=((-1) * pow(log(dist), 2));
-		//vecF = vSectionHyper(startP, endP, dist);
-	}*/
-	F = pow((dist - 0.2), 5) * 5000;
+	F = pow((dist - 0.2), 3) * 200;
+	if (F > 100) F = 100;
 	vecF = vSectionHyper(startP, endP, dist);
 	//printf("dist: %lf %lf %lf %lf \n",dist, vecF.x, vecF.y, vecF.z);
 	vecF = vecF * F;
@@ -356,14 +347,9 @@ vec3 Fe(float dist, vec3 startP, vec3 endP) {
 vec3 Fn(float dist, vec3 startP, vec3 endP) {
 	float F;
 	vec3 vecF;
-	/*if (dist <= 0.0008) {
-		F = -4;
-	} else if (dist >= 7.5) {
-		F = 0;
-	} else F = log(dist) - 0.9;*/
-	F =  0.1*log2(dist) - 0.2;
+	F = log(dist) - 1;
 	if (F > 0) F = 0;
-	if (F < -50) F = -50;
+	//if (F < -200) F = -200;
 	vecF= vSectionHyper(startP, endP, dist);
 	vecF = vecF * F;
 	return vecF;
@@ -380,10 +366,7 @@ vec3 Fo(vec3 startP) {
 	}
 	printf("%lf\n", dist);
 	
-	if (dist >= 2) {
-		F = 8;
-	} else F = (dist-0.1)*4;
-	F = dist * 500;
+	F = dist * 30;
 	vecF = vSectionHyper(startP, vec3(0, 0, 1), dist);
 	vecF=vecF* F;
 	//vecF = normalize(vecF);
@@ -434,15 +417,16 @@ void dinSim(double dt) {
 		//if (length(vi) < FLT_MIN) vi = vec3(0, 0, 0);
 		//printf("%lf %lf %lf \n", vi.x, vi.y, vi.z);
 		Fi = Fi + Fo(graph.vertices[i]);
-
-		vec3 frictionF = vi * 0.0001;
-		if(length(frictionF) > FLT_MIN) Fi = Fi - vi * 0.0001;
+	
+		vec3 frictionF = vi * pow(length(vi), 100);
+		//frictionF = normalize(frictionF);
+		if(length(frictionF) > FLT_MIN) Fi = Fi - frictionF;
 
 
 		printf("%lf %lf %lf \n", Fi.x, Fi.y, Fi.z);
 		printf("dt: %lf %lf %lf \n", Fi.x*dt, Fi.y*dt, Fi.z*dt);
 		printf("vi elott: %lf %lf %lf \n", vi.x, vi.y, vi.z);
-		Fi = normalize(Fi);
+		//Fi = normalize(Fi);
 
 		if (abs(Fi.x * dt) >= FLT_MIN && abs(Fi.y * dt) >= FLT_MIN && abs(Fi.z * dt) >= FLT_MIN) {
 			if (abs(vi.x) < FLT_MIN || abs(vi.y) < FLT_MIN || abs(vi.z) < FLT_MIN) {
@@ -464,8 +448,6 @@ void dinSim(double dt) {
 			
 		}
 		
-
-
 		printf("vi utan: %lf %lf %lf \n", vi.x, vi.y, vi.z);
 		
 		float viLength = length(vi);
@@ -479,8 +461,6 @@ void dinSim(double dt) {
 			continue;
 		} 
 		printf("%lf\n", dist);
-		
-
 		
 		vec3 newPos =rSectionHyper(graph.vertices[i], vi, dist);
 		newPos.z = sqrt(1 + newPos.x * newPos.x + newPos.y * newPos.y);
@@ -564,9 +544,9 @@ void onIdle() {
 	}
 
 	//dinSim(time - previousTime);
-	double T = 3000;
+	double T = 6000;
 	if (time < startTime+T && firstStart) {
-		double dt = (time - previousTime) / (double)100;
+		double dt = (time - previousTime) / (double)1000;
 		dinSim(dt);
 		previousTime = time;
 		glutPostRedisplay();
