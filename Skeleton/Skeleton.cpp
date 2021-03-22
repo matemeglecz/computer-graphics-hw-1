@@ -64,6 +64,12 @@ static const double FULLNESS = 0.05;
 
 static const int LINES_NUM = round(VERTICES_NUM * (VERTICES_NUM - 1) / 2 * FULLNESS);
 
+GPUProgram gpuProgram; // vertex and fragment shaders
+unsigned int vaoVertices;	   // virtual world on the GPU
+unsigned int vboVertices;		// vertex buffer object
+unsigned int vaoLines;
+unsigned int vboLines;
+
 class Line {
 public:
 	vec3* vertex1;
@@ -88,13 +94,64 @@ public:
 			verticesV.push_back(vec3(0, 0, 0));
 		}
 	}
-};
 
-GPUProgram gpuProgram; // vertex and fragment shaders
-unsigned int vaoVertices;	   // virtual world on the GPU
-unsigned int vboVertices;		// vertex buffer object
-unsigned int vaoLines;
-unsigned int vboLines;
+	void drawPoints() {
+		glBindVertexArray(vaoVertices);
+		glBindBuffer(GL_ARRAY_BUFFER, vboVertices);
+
+		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+			vertices.size() * sizeof(vec3),  // # bytes
+			&vertices[0],	      	// address
+			GL_STATIC_DRAW);	// we do not change later
+
+		glEnableVertexAttribArray(0);  // AttribArray 0
+		glVertexAttribPointer(0,       // vbo -> AttribArray 0
+			3, GL_FLOAT, GL_FALSE, // three floats/attrib, not fixed-point
+			0, NULL); 		     // stride, offset: tightly packed
+
+		glBindVertexArray(vaoVertices);  // Draw call
+		glDrawArrays(GL_POINTS, 0 /*startIdx*/, VERTICES_NUM /*# Elements*/);
+	}
+
+	void drawLines() {
+		glBindVertexArray(vaoLines);
+		glBindBuffer(GL_ARRAY_BUFFER, vboLines);
+
+		std::vector<vec3> usedLines;
+		for (size_t i = 0; i < lines.size(); i++)
+		{
+			if (lines[i].used) {
+				usedLines.push_back(*lines[i].vertex1);
+				usedLines.push_back(*lines[i].vertex2);
+			}
+		}
+
+		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+			usedLines.size() * sizeof(vec3),  // # bytes
+			&usedLines[0],	      	// address
+			GL_STATIC_DRAW);	// we do not change later
+
+		glEnableVertexAttribArray(0);  // AttribArray 0
+		glVertexAttribPointer(0,       // vbo -> AttribArray 0
+			3, GL_FLOAT, GL_FALSE, // three floats/attrib, not fixed-point
+			0, NULL); 		     // stride, offset: tightly packed
+
+		glBindVertexArray(vaoLines);  // Draw call
+		glDrawArrays(GL_LINES, 0 /*startIdx*/, LINES_NUM * 2 /*# Elements*/);
+	}
+
+	void drawGraph() {
+		// Set color to (0, 1, 0) = green
+		int color = glGetUniformLocation(gpuProgram.getId(), "color");
+		glUniform3f(color, 1.0f, 0.0f, 1.0f); // 3 floats
+		drawPoints();
+
+		glUniform3f(color, 1.0f, 1.0f, 0.0f); //lines are yellow
+		drawLines();
+	}
+
+	
+};
 
 int pressedButton;
 Graph graph;
@@ -111,8 +168,6 @@ void onInitialization() {
 	glGenBuffers(1, &vboVertices);	// Generate 1 buffer
 	
 	graph = Graph();
-	// Geometry with 24 bytes (6 floats or 3 x 2 coordinates)
-
 
 	for (int i = 0; i < VERTICES_NUM; i++) {
 		float x = ((((float)(rand() * 2) ) / (RAND_MAX))- 1.0f)*1.5;
@@ -121,8 +176,6 @@ void onInitialization() {
 		graph.vertices.push_back(vec3(x, y, (float)sqrt(1+x*x+y*y)));
 	}
 	
-	
-
 	//lines generate
 	for (int i = 0; i < VERTICES_NUM; i++) {
 		for (int j = 0; j < i; j++) {
@@ -145,61 +198,6 @@ void onInitialization() {
 	gpuProgram.create(vertexSource, fragmentSource, "outColor");
 }
 
-void drawPoints() {
-	glBindVertexArray(vaoVertices);
-	glBindBuffer(GL_ARRAY_BUFFER, vboVertices);
-
-	glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-		graph.vertices.size() * sizeof(vec3),  // # bytes
-		&graph.vertices[0],	      	// address
-		GL_STATIC_DRAW);	// we do not change later
-
-	glEnableVertexAttribArray(0);  // AttribArray 0
-	glVertexAttribPointer(0,       // vbo -> AttribArray 0
-		3, GL_FLOAT, GL_FALSE, // three floats/attrib, not fixed-point
-		0, NULL); 		     // stride, offset: tightly packed
-
-	glBindVertexArray(vaoVertices);  // Draw call
-	glDrawArrays(GL_POINTS, 0 /*startIdx*/, VERTICES_NUM /*# Elements*/);
-}
-
-void drawLines() {
-	glBindVertexArray(vaoLines);
-	glBindBuffer(GL_ARRAY_BUFFER, vboLines);
-
-	std::vector<vec3> usedLines;
-	for (size_t i = 0; i < graph.lines.size(); i++)
-	{
-		if (graph.lines[i].used) {
-			usedLines.push_back(*graph.lines[i].vertex1);
-			usedLines.push_back(*graph.lines[i].vertex2);
-		}
-	}
-
-	glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-		usedLines.size() * sizeof(vec3),  // # bytes
-		&usedLines[0],	      	// address
-		GL_STATIC_DRAW);	// we do not change later
-
-	glEnableVertexAttribArray(0);  // AttribArray 0
-	glVertexAttribPointer(0,       // vbo -> AttribArray 0
-		3, GL_FLOAT, GL_FALSE, // three floats/attrib, not fixed-point
-		0, NULL); 		     // stride, offset: tightly packed
-
-	glBindVertexArray(vaoLines);  // Draw call
-	glDrawArrays(GL_LINES, 0 /*startIdx*/, LINES_NUM * 2 /*# Elements*/);
-}
-
-void drawGraph() {
-	// Set color to (0, 1, 0) = green
-	int color = glGetUniformLocation(gpuProgram.getId(), "color");
-	glUniform3f(color, 1.0f, 0.0f, 1.0f); // 3 floats
-	drawPoints();
-
-	glUniform3f(color, 1.0f, 1.0f, 0.0f); //lines are yellow
-	drawLines();
-}
-
 // Window has become invalid: Redraw
 void onDisplay() {
 	glPointSize(8.0f);
@@ -214,10 +212,12 @@ void onDisplay() {
 	int location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
 	glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
 
-	drawGraph(); // gráf rajzolása
+	graph.drawGraph(); // gráf rajzolása
 
 	glutSwapBuffers(); // exchange buffers for double buffering
 }
+
+
 
 void KMeans() { //ennek kell még valami hogy többször is lehessen egy más után szóval ha valahol FLT_MIN alá megy valami akkor inkább ne is történjen semmi
 
@@ -363,7 +363,6 @@ bool newStartTime=false;
 bool firstStart = false;
 
 void dinSim(double dt) {
-	int num = 0;
 	for (int i = 0; i < VERTICES_NUM; i++) {
 		vec3 vi = graph.verticesV[i];
 		//printf("...............................................\n");
@@ -399,8 +398,8 @@ void dinSim(double dt) {
 		//printf("%lf %lf %lf \n", vi.x, vi.y, vi.z);
 		Fi = Fi + Fo(graph.vertices[i]);
 		
-		printf("%lf \n", length(vi));
-		vec3 frictionF = vi * pow(length(vi), 100);
+		//printf("%lf \n", length(vi));
+		vec3 frictionF = vi * pow(length(vi), 2);
 		/*if (length(vi) > 1) {
 			frictionF = vi * pow(length(vi), 100);
 		} else frictionF = vi * length(vi)*2;*/
