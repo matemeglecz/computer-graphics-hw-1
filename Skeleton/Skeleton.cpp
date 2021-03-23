@@ -42,6 +42,8 @@ const char * const vertexSource = R"(
 	layout(location = 0) in vec3 vp;	// Varying input: vp = vertex position is expected in attrib array 0
 	layout(location = 1) in vec2 vertexUV;
 
+	out vec2 texCoord;
+
 	void main() {
 		texCoord=vertexUV;
 		gl_Position = vec4(vp.x/vp.z, vp.y/vp.z, 0, 1) * MVP;		// transform vp from modeling space to normalized device space
@@ -62,7 +64,7 @@ const char * const fragmentSource = R"(
 
 	void main() {
 		if(isPoint==1){
-			fragmentColor = texture(textureUnit, texCoord);
+			outColor = texture(textureUnit, texCoord);
 		} else {
 			outColor = vec4(color, 1);	// computed color is the color of the primitive
 		}
@@ -75,10 +77,10 @@ static const double FULLNESS = 0.05;
 static const int LINES_NUM = round(VERTICES_NUM * (VERTICES_NUM - 1) / 2 * FULLNESS);
 
 GPUProgram gpuProgram; // vertex and fragment shaders
-unsigned int vaoVertices;	   // virtual world on the GPU
-unsigned int vboVertices[2];		// vertex buffer object
-unsigned int vaoLines;
-unsigned int vboLines;
+unsigned int vao;	   // virtual world on the GPU
+unsigned int vbo[2];		// vertex buffer object
+/*unsigned int vaoLines;
+unsigned int vboLines;*/
 
 
 float distanceHyper(vec3 p, vec3 q) {
@@ -124,36 +126,29 @@ public:
 	std::vector<vec3> vertices;
 	std::vector<vec3> verticesV;
 	std::vector<Line> lines;
-	std::vector<Texture> textures;
+	std::vector<Texture*> textures;
 
 	Graph() {
 		for (int i = 0; i < VERTICES_NUM; i++) {
 			verticesV.push_back(vec3(0, 0, 0));
 		}
 
+		vec2 firstUVS;
 		for (double i = 0; i < M_PI; i += dAngle) {
-			float x = 0.5 + cos(i);
-			float y = 0.5 + sin(i);
+			float x = 0.5 + 0.5 * cos(i);
+			float y = 0.5 + 0.5 * sin(i);
 			uvs.push_back(vec2(x,y));
+
+			if (i == 0) firstUVS = vec2(x, y);
 		}
+		uvs.push_back(firstUVS);
 	}
 
 	void drawPoints() {
-		glBindVertexArray(vaoVertices);
+		glBindVertexArray(vao);
 
-		/*glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-			vertices.size() * sizeof(vec3),  // # bytes
-			&vertices[0],	      	// address
-			GL_STATIC_DRAW);	// we do not change later
+		float circleR = 0.05;
 
-		glEnableVertexAttribArray(0);  // AttribArray 0
-		glVertexAttribPointer(0,       // vbo -> AttribArray 0
-			3, GL_FLOAT, GL_FALSE, // three floats/attrib, not fixed-point
-			0, NULL); 		     // stride, offset: tightly packed
-
-		glBindVertexArray(vaoVertices);  // Draw call*/
-		//glDrawArrays(GL_POINTS, 0 /*startIdx*/, VERTICES_NUM /*# Elements*/);
-		float circleR = 0.03;
 		for (int i = 0; i < VERTICES_NUM; i++) {
 			std::vector<vec3> circlePoints;
 			vec2 center = vec2((vertices[i].x / vertices[i].z), (vertices[i].y / vertices[i].z));
@@ -188,7 +183,7 @@ public:
 			}
 			circlePoints.push_back(firstPoint);
 
-			glBindBuffer(GL_ARRAY_BUFFER, vboVertices[0]);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
 			glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
 				circlePoints.size() * sizeof(vec3),  // # bytes
 				&circlePoints[0],	      	// address
@@ -200,21 +195,21 @@ public:
 				0, NULL); 		     // stride, offset: tightly packed
 
 
-			glBindBuffer(GL_ARRAY_BUFFER, vboVertices[1]);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
 			glBufferData(GL_ARRAY_BUFFER, uvs.size()*sizeof(vec2), &uvs[0], GL_STATIC_DRAW);
 			glEnableVertexAttribArray(1);
 			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 
-			gpuProgram.setUniform(textures[i], "textureUnit");
+			gpuProgram.setUniform(*textures[i], "textureUnit");
 
-			glBindVertexArray(vaoVertices);  // Draw call*/
+			glBindVertexArray(vao);  // Draw call*/
 			glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, circlePoints.size() /*# Elements*/);
 		}
 	}
 
 	void drawLines() {
-		glBindVertexArray(vaoLines);
-		glBindBuffer(GL_ARRAY_BUFFER, vboLines);
+		glBindVertexArray(vao);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
 
 		std::vector<vec3> usedLines;
 		for (size_t i = 0; i < lines.size(); i++)
@@ -236,21 +231,20 @@ public:
 			0, NULL); 		     // stride, offset: tightly packed
 
 
-		glBindVertexArray(vaoLines);  // Draw call
+		glBindVertexArray(vao);  // Draw call
 		glDrawArrays(GL_LINES, 0 /*startIdx*/, LINES_NUM * 2 /*# Elements*/);
 	}
 
 	void drawGraph() {
 		// Set color to (0, 1, 0) = green
 		int color = glGetUniformLocation(gpuProgram.getId(), "color");
-		int isPoint = glGetUniformLocation(gpuProgram.getId(), "isPoint");
 		
-		glUniform1f(isPoint, 0.0f); // 1 float
+		gpuProgram.setUniform(0, "isPoint"); // 1 float
 		glUniform3f(color, 1.0f, 1.0f, 0.0f); //lines are yellow
 		drawLines();
 
-		glUniform3f(color, 1.0f, 0.0f, 1.0f); // 3 floats
-		glUniform1f(isPoint, 1.0f); // 1 float
+		//glUniform3f(color, 1.0f, 0.0f, 1.0f); // 3 floats
+		gpuProgram.setUniform(1, "isPoint");
 		drawPoints();
 	}
 
@@ -261,28 +255,34 @@ int pressedButton;
 Graph graph;
 vec2 vectorStart;
 
-Texture TextureGen(vec3 point) {
-	int width = 100, height = 100;				// create checkerboard texture procedurally
+Texture* TextureGen(vec3 point, int i) {
+	i = i + 1;
+	int width = 20, height = 20;				// create checkerboard texture procedurally
 	std::vector<vec4> image(width * height);
 	for (int y = 0; y < height; y++) {
+		float r, g, b;
+		if (y % 4 == 0) {
+			r = (float)rand() / RAND_MAX;
+			g = (float)rand() / RAND_MAX;
+			b = (float)rand() / RAND_MAX;
+		}
 		for (int x = 0; x < width; x++) {
-			//float luminance = ((x / 16) % 2) ^ ((y / 16) % 2);
-			image[y * width + x] = vec4(point.x, point.y, point.z, 1);
+			image[y * width + x] = vec4(r, g, b, 1);
 		}
 	}
 
-	return Texture(width, height, image);
+	return  new Texture(width, height, image);
 }
 
 // Initialization, create an OpenGL context
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
 
-	glGenVertexArrays(1, &vaoLines);	// get 1 vao id
-	glGenBuffers(1, &vboLines);	// Generate 1 buffer
-	
-	glGenVertexArrays(1, &vaoVertices);	// get 1 vao id
-	glGenBuffers(2, vboVertices);	// Generate 1 buffer
+	/*glGenVertexArrays(1, &vaoLines);	// get 1 vao id
+	glGenBuffers(1, &vboLines);	// Generate 1 buffer*/
+
+	glGenVertexArrays(1, &vao);	// get 1 vao id
+	glGenBuffers(2, vbo);	// Generate 1 buffer
 	
 	graph = Graph();
 
@@ -291,10 +291,8 @@ void onInitialization() {
 		float y = ((((float)(rand() * 2)) / (RAND_MAX)) - 1.0f) * 1.5;
 
 		graph.vertices.push_back(vec3(x, y, (float)sqrt(1 + x * x + y * y)));
-		graph.textures.push_back(TextureGen(graph.vertices[i]));
+		graph.textures.push_back(TextureGen(graph.vertices[i], i));
 	}
-
-	
 
 	//lines generate
 	for (int i = 0; i < VERTICES_NUM; i++) {
@@ -313,9 +311,6 @@ void onInitialization() {
 			}
 		}
 	}
-
-
-
 
 	// create program for the GPU
 	gpuProgram.create(vertexSource, fragmentSource, "outColor");
