@@ -40,8 +40,10 @@ const char * const vertexSource = R"(
 
 	uniform mat4 MVP;			// uniform variable, the Model-View-Projection transformation matrix
 	layout(location = 0) in vec3 vp;	// Varying input: vp = vertex position is expected in attrib array 0
+	layout(location = 1) in vec2 vertexUV;
 
 	void main() {
+		texCoord=vertexUV;
 		gl_Position = vec4(vp.x/vp.z, vp.y/vp.z, 0, 1) * MVP;		// transform vp from modeling space to normalized device space
 	}
 )";
@@ -51,11 +53,19 @@ const char * const fragmentSource = R"(
 	#version 330			// Shader 3.3
 	precision highp float;	// normal floats, makes no difference on desktop computers
 	
+	uniform sampler2D textureUnit;
 	uniform vec3 color;		// uniform variable, the color of the primitive
+	uniform int isPoint;
+	
+	in vec2 texCoord;
 	out vec4 outColor;		// computed color of the current pixel
 
 	void main() {
-		outColor = vec4(color, 1);	// computed color is the color of the primitive
+		if(isPoint==1){
+			fragmentColor = texture(textureUnit, texCoord);
+		} else {
+			outColor = vec4(color, 1);	// computed color is the color of the primitive
+		}
 	}
 )";
 
@@ -66,9 +76,30 @@ static const int LINES_NUM = round(VERTICES_NUM * (VERTICES_NUM - 1) / 2 * FULLN
 
 GPUProgram gpuProgram; // vertex and fragment shaders
 unsigned int vaoVertices;	   // virtual world on the GPU
-unsigned int vboVertices;		// vertex buffer object
+unsigned int vboVertices[2];		// vertex buffer object
 unsigned int vaoLines;
 unsigned int vboLines;
+
+
+float distanceHyper(vec3 p, vec3 q) {
+	//printf("%lf, %lf\n", q.x, p.x);
+	//printf("%lf\n", p.x * q.x + p.y * q.y - p.z * q.z);
+	return acosh((-1) * (p.x * q.x + p.y * q.y - p.z * q.z));
+}
+
+vec3 vSectionHyper(vec3 p, vec3 r, float dist) {
+	return (r - p * cosh(dist)) / sinh(dist);
+}
+
+vec3 rSectionHyper(vec3 p, vec3 v, float dist) {
+	return (p * cosh(dist) + v * sinh(dist));
+}
+
+vec3 mirrorHyper(vec3 p, vec3 m) {
+	float dist = distanceHyper(p, m);
+	vec3 v = vSectionHyper(p, m, dist);
+	return rSectionHyper(p, v, 2 * dist);
+}
 
 class Line {
 public:
@@ -83,23 +114,34 @@ public:
 	}
 };
 
+
 class Graph {
+private:
+	std::vector<vec2> uvs;
+	float dAngle = 0.1;
+	
 public:
 	std::vector<vec3> vertices;
 	std::vector<vec3> verticesV;
 	std::vector<Line> lines;
+	std::vector<Texture> textures;
 
 	Graph() {
 		for (int i = 0; i < VERTICES_NUM; i++) {
 			verticesV.push_back(vec3(0, 0, 0));
 		}
+
+		for (double i = 0; i < M_PI; i += dAngle) {
+			float x = 0.5 + cos(i);
+			float y = 0.5 + sin(i);
+			uvs.push_back(vec2(x,y));
+		}
 	}
 
 	void drawPoints() {
 		glBindVertexArray(vaoVertices);
-		glBindBuffer(GL_ARRAY_BUFFER, vboVertices);
 
-		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+		/*glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
 			vertices.size() * sizeof(vec3),  // # bytes
 			&vertices[0],	      	// address
 			GL_STATIC_DRAW);	// we do not change later
@@ -109,8 +151,65 @@ public:
 			3, GL_FLOAT, GL_FALSE, // three floats/attrib, not fixed-point
 			0, NULL); 		     // stride, offset: tightly packed
 
-		glBindVertexArray(vaoVertices);  // Draw call
-		glDrawArrays(GL_POINTS, 0 /*startIdx*/, VERTICES_NUM /*# Elements*/);
+		glBindVertexArray(vaoVertices);  // Draw call*/
+		//glDrawArrays(GL_POINTS, 0 /*startIdx*/, VERTICES_NUM /*# Elements*/);
+		float circleR = 0.03;
+		for (int i = 0; i < VERTICES_NUM; i++) {
+			std::vector<vec3> circlePoints;
+			vec2 center = vec2((vertices[i].x / vertices[i].z), (vertices[i].y / vertices[i].z));
+			vec3 firstPoint;
+			for (double j = 0; j < 2 * M_PI; j += dAngle) {
+				vec3 vectorR=vec3(0,0,1);
+				vectorR.x = center.x + circleR*cos(j);
+				vectorR.y = center.y + circleR*sin(j);
+				vectorR.x = vectorR.x - center.x;
+				vectorR.y = vectorR.y - center.y;
+				vectorR = vectorR / (float)sqrt(1 - vectorR.x * vectorR.x - vectorR.y * vectorR.y);
+				//printf("[%d]  %lf %lf %lf \n", i, vectorR.x, vectorR.y, vectorR.z);
+				vec3 p = vec3(0, 0, 1);
+
+				float dist = distanceHyper(p, vectorR);
+				//printf("%lf\n", dist);
+				vec3 v = vSectionHyper(p, vectorR, dist);
+
+				//m1 point
+				vec3 m1 = p * cosh(dist / 4) + v * sinh(dist / 4);
+				//m2 point
+				vec3 m2 = p * cosh(dist * 3 / 4) + v * sinh(dist * 3 / 4);
+
+				vec3 circlePoint=vertices[i];
+				circlePoint = mirrorHyper(circlePoint, m1);
+				circlePoint = mirrorHyper(circlePoint, m2);
+				//printf("[%d]  %lf %lf %lf = %lf\n", i, circlePoint.x, circlePoint.y, circlePoint.z, circlePoint.x * circlePoint.x + circlePoint.y * circlePoint.y - circlePoint.z * circlePoint.z);
+				circlePoints.push_back(circlePoint);
+				if (j == 0) {
+					firstPoint = circlePoint;
+				}
+			}
+			circlePoints.push_back(firstPoint);
+
+			glBindBuffer(GL_ARRAY_BUFFER, vboVertices[0]);
+			glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+				circlePoints.size() * sizeof(vec3),  // # bytes
+				&circlePoints[0],	      	// address
+				GL_STATIC_DRAW);	// we do not change later
+
+			glEnableVertexAttribArray(0);  // AttribArray 0
+			glVertexAttribPointer(0,       // vbo -> AttribArray 0
+				3, GL_FLOAT, GL_FALSE, // three floats/attrib, not fixed-point
+				0, NULL); 		     // stride, offset: tightly packed
+
+
+			glBindBuffer(GL_ARRAY_BUFFER, vboVertices[1]);
+			glBufferData(GL_ARRAY_BUFFER, uvs.size()*sizeof(vec2), &uvs[0], GL_STATIC_DRAW);
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+
+			gpuProgram.setUniform(textures[i], "textureUnit");
+
+			glBindVertexArray(vaoVertices);  // Draw call*/
+			glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, circlePoints.size() /*# Elements*/);
+		}
 	}
 
 	void drawLines() {
@@ -136,6 +235,7 @@ public:
 			3, GL_FLOAT, GL_FALSE, // three floats/attrib, not fixed-point
 			0, NULL); 		     // stride, offset: tightly packed
 
+
 		glBindVertexArray(vaoLines);  // Draw call
 		glDrawArrays(GL_LINES, 0 /*startIdx*/, LINES_NUM * 2 /*# Elements*/);
 	}
@@ -143,11 +243,15 @@ public:
 	void drawGraph() {
 		// Set color to (0, 1, 0) = green
 		int color = glGetUniformLocation(gpuProgram.getId(), "color");
-		glUniform3f(color, 1.0f, 0.0f, 1.0f); // 3 floats
-		drawPoints();
-
+		int isPoint = glGetUniformLocation(gpuProgram.getId(), "isPoint");
+		
+		glUniform1f(isPoint, 0.0f); // 1 float
 		glUniform3f(color, 1.0f, 1.0f, 0.0f); //lines are yellow
 		drawLines();
+
+		glUniform3f(color, 1.0f, 0.0f, 1.0f); // 3 floats
+		glUniform1f(isPoint, 1.0f); // 1 float
+		drawPoints();
 	}
 
 	
@@ -157,6 +261,19 @@ int pressedButton;
 Graph graph;
 vec2 vectorStart;
 
+Texture TextureGen(vec3 point) {
+	int width = 100, height = 100;				// create checkerboard texture procedurally
+	std::vector<vec4> image(width * height);
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			//float luminance = ((x / 16) % 2) ^ ((y / 16) % 2);
+			image[y * width + x] = vec4(point.x, point.y, point.z, 1);
+		}
+	}
+
+	return Texture(width, height, image);
+}
+
 // Initialization, create an OpenGL context
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
@@ -165,17 +282,20 @@ void onInitialization() {
 	glGenBuffers(1, &vboLines);	// Generate 1 buffer
 	
 	glGenVertexArrays(1, &vaoVertices);	// get 1 vao id
-	glGenBuffers(1, &vboVertices);	// Generate 1 buffer
+	glGenBuffers(2, vboVertices);	// Generate 1 buffer
 	
 	graph = Graph();
 
 	for (int i = 0; i < VERTICES_NUM; i++) {
-		float x = ((((float)(rand() * 2) ) / (RAND_MAX))- 1.0f)*1.5;
-		float y = ((((float)(rand() * 2)) / (RAND_MAX)) - 1.0f)*1.5;
-		
-		graph.vertices.push_back(vec3(x, y, (float)sqrt(1+x*x+y*y)));
+		float x = ((((float)(rand() * 2)) / (RAND_MAX)) - 1.0f) * 1.5;
+		float y = ((((float)(rand() * 2)) / (RAND_MAX)) - 1.0f) * 1.5;
+
+		graph.vertices.push_back(vec3(x, y, (float)sqrt(1 + x * x + y * y)));
+		graph.textures.push_back(TextureGen(graph.vertices[i]));
 	}
+
 	
+
 	//lines generate
 	for (int i = 0; i < VERTICES_NUM; i++) {
 		for (int j = 0; j < i; j++) {
@@ -193,6 +313,9 @@ void onInitialization() {
 			}
 		}
 	}
+
+
+
 
 	// create program for the GPU
 	gpuProgram.create(vertexSource, fragmentSource, "outColor");
@@ -256,25 +379,6 @@ void KMeans() { //ennek kell még valami hogy többször is lehessen egy más után s
 	}
 }
 
-float distanceHyper(vec3 p, vec3 q) {
-	//printf("%lf, %lf\n", q.x, p.x);
-	//printf("%lf\n", p.x * q.x + p.y * q.y - p.z * q.z);
-	return acosh((-1)*(p.x*q.x + p.y*q.y - p.z*q.z));
-}
-
-vec3 vSectionHyper(vec3 p, vec3 r, float dist) {
-	return (r - p * cosh(dist)) / sinh(dist);
-}
-
-vec3 rSectionHyper(vec3 p, vec3 v, float dist) {
-	return (p * cosh(dist) + v * sinh(dist));
-}
-
-vec3 mirrorHyper(vec3 p, vec3 m) {
-	float dist = distanceHyper(p, m);
-	vec3 v = vSectionHyper(p, m, dist);
-	return rSectionHyper(p, v, 2 * dist);
-}
 
 void graphMove(float cx, float cy) {
 	if (pressedButton != GLUT_RIGHT_BUTTON) return;
@@ -349,7 +453,6 @@ vec3 Fo(vec3 startP) {
 	if (!(dist > FLT_MIN)) {
 		return vec3(0, 0, 0);
 	}
-	
 	F = dist * 30;
 	vecF = vSectionHyper(startP, vec3(0, 0, 1), dist);
 	vecF=vecF* F;
@@ -536,5 +639,4 @@ void onIdle() {
 		previousTime = time;
 		glutPostRedisplay();
 	}
-
 }
