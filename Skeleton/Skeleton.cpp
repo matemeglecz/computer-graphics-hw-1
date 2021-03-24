@@ -71,6 +71,8 @@ const char * const fragmentSource = R"(
 	}
 )";
 
+#define FLT_MIN		1.175494351e-38F        // min normalized positive value
+
 static const int VERTICES_NUM = 50;
 static const double FULLNESS = 0.05;
 
@@ -130,11 +132,10 @@ public:
 		}
 
 		vec2 firstUVS;
-		for (double i = 0; i < M_PI; i += dAngle) {
+		for (double i = 0; i < M_PI*2; i += dAngle) {
 			float x = 0.5 + 0.5 * cos(i);
 			float y = 0.5 + 0.5 * sin(i);
 			uvs.push_back(vec2(x,y));
-
 			if (i == 0) firstUVS = vec2(x, y);
 		}
 		uvs.push_back(firstUVS);
@@ -157,7 +158,6 @@ public:
 				vec3 p = vec3(0, 0, 1);
 
 				float dist = distanceHyper(p, vectorR);
-				//printf("%lf\n", dist);
 				vec3 v = vSectionHyper(p, vectorR, dist);
 
 				//m1 point
@@ -250,7 +250,7 @@ Texture* TextureGen(vec3 point) {
 	std::vector<vec4> image(width * height);
 	float r, g, b;
 	for (int y = 0; y < height; y++) {
-		if (y % 4 == 0) {
+		if (y % 5 == 0) {
 			r = (float)rand() / RAND_MAX;
 			g = (float)rand() / RAND_MAX;
 			b = (float)rand() / RAND_MAX;
@@ -272,10 +272,10 @@ void onInitialization() {
 	graph = Graph();
 
 	for (int i = 0; i < VERTICES_NUM; i++) {
-		float x = ((((float)(rand() * 2)) / (RAND_MAX)) - 1.0f) * 1.5;
-		float y = ((((float)(rand() * 2)) / (RAND_MAX)) - 1.0f) * 1.5;
+		float x = (((float)rand() * 2 / (float)(RAND_MAX)) - 1.0f);
+		float y = (((float)rand() * 2 / (float)(RAND_MAX)) - 1.0f);
 
-		graph.vertices.push_back(vec3(x, y, (float)sqrt(1 + x * x + y * y)));
+		graph.vertices.push_back(vec3(x, y, (float)sqrt(1 + x*x + y * y)));
 		graph.textures.push_back(TextureGen(graph.vertices[i]));
 	}
 
@@ -343,9 +343,7 @@ void KMeans() {
 		}
 		center = center / (VERTICES_NUM - 1);
 		center.z = 1;
-		if (!(abs(center.x) >= FLT_MIN) || !(abs(center.y) >= FLT_MIN)) {
-			printf("problem\n");
-		}
+	
 		center = center / sqrt(1 - center.x * center.x - center.y * center.y);
 		
 		if (abs(center.x) >= FLT_MIN && abs(center.y) >= FLT_MIN && abs(center.z) >= FLT_MIN) {
