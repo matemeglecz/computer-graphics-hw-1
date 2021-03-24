@@ -79,8 +79,6 @@ static const int LINES_NUM = round(VERTICES_NUM * (VERTICES_NUM - 1) / 2 * FULLN
 GPUProgram gpuProgram; // vertex and fragment shaders
 unsigned int vao;	   // virtual world on the GPU
 unsigned int vbo[2];		// vertex buffer object
-/*unsigned int vaoLines;
-unsigned int vboLines;*/
 
 
 float distanceHyper(vec3 p, vec3 q) {
@@ -120,7 +118,7 @@ public:
 class Graph {
 private:
 	std::vector<vec2> uvs;
-	float dAngle = 0.1;
+	float dAngle = 0.05;
 	
 public:
 	std::vector<vec3> vertices;
@@ -155,10 +153,10 @@ public:
 			vec3 firstPoint;
 			for (double j = 0; j < 2 * M_PI; j += dAngle) {
 				vec3 vectorR=vec3(0,0,1);
-				vectorR.x = center.x + circleR*cos(j);
-				vectorR.y = center.y + circleR*sin(j);
-				vectorR.x = vectorR.x - center.x;
-				vectorR.y = vectorR.y - center.y;
+				vectorR.x = circleR*cos(j);
+				vectorR.y = circleR*sin(j);
+				//vectorR.x = vectorR.x - center.x;
+				//vectorR.y = vectorR.y - center.y;
 				vectorR = vectorR / (float)sqrt(1 - vectorR.x * vectorR.x - vectorR.y * vectorR.y);
 				//printf("[%d]  %lf %lf %lf \n", i, vectorR.x, vectorR.y, vectorR.z);
 				vec3 p = vec3(0, 0, 1);
@@ -255,12 +253,11 @@ int pressedButton;
 Graph graph;
 vec2 vectorStart;
 
-Texture* TextureGen(vec3 point, int i) {
-	i = i + 1;
+Texture* TextureGen(vec3 point) {
 	int width = 20, height = 20;				// create checkerboard texture procedurally
 	std::vector<vec4> image(width * height);
+	float r, g, b;
 	for (int y = 0; y < height; y++) {
-		float r, g, b;
 		if (y % 4 == 0) {
 			r = (float)rand() / RAND_MAX;
 			g = (float)rand() / RAND_MAX;
@@ -278,9 +275,6 @@ Texture* TextureGen(vec3 point, int i) {
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
 
-	/*glGenVertexArrays(1, &vaoLines);	// get 1 vao id
-	glGenBuffers(1, &vboLines);	// Generate 1 buffer*/
-
 	glGenVertexArrays(1, &vao);	// get 1 vao id
 	glGenBuffers(2, vbo);	// Generate 1 buffer
 	
@@ -291,7 +285,7 @@ void onInitialization() {
 		float y = ((((float)(rand() * 2)) / (RAND_MAX)) - 1.0f) * 1.5;
 
 		graph.vertices.push_back(vec3(x, y, (float)sqrt(1 + x * x + y * y)));
-		graph.textures.push_back(TextureGen(graph.vertices[i], i));
+		graph.textures.push_back(TextureGen(graph.vertices[i]));
 	}
 
 	//lines generate
@@ -335,10 +329,7 @@ void onDisplay() {
 	glutSwapBuffers(); // exchange buffers for double buffering
 }
 
-
-
-void KMeans() { //ennek kell még valami hogy többször is lehessen egy más után szóval ha valahol FLT_MIN alá megy valami akkor inkább ne is történjen semmi
-
+void KMeans() { 
 	for (size_t i = 0; i < VERTICES_NUM; i++){
 		vec3 center= vec3(0, 0, 0);
 
@@ -369,8 +360,6 @@ void KMeans() { //ennek kell még valami hogy többször is lehessen egy más után s
 		if (abs(center.x) >= FLT_MIN && abs(center.y) >= FLT_MIN && abs(center.z) >= FLT_MIN) {
 			graph.vertices[i] = center;
 		}
-
-		//printf("%lf, %lf, %lf = %lf\n", center.x, center.y, center.z, (center.x * center.x + center.y * center.y - center.z * center.z));
 	}
 }
 
@@ -390,8 +379,6 @@ void graphMove(float cx, float cy) {
 			printf("problem\n");
 		}
 
-		//printf("%lf", FLT_MIN);
-		//printf("%lf, %lf, %lf\t = %lf\n", moveVec.x, moveVec.y, moveVec.z);
 		vec3 p = vec3(0, 0, 1);
 
 		float dist = distanceHyper(p, moveVec);
@@ -423,10 +410,8 @@ void graphMove(float cx, float cy) {
 vec3 Fe(float dist, vec3 startP, vec3 endP) {
 	float F;
 	vec3 vecF;
-	F = pow((dist - 0.2), 3) * 200;
-	if (F > 100) F = 100;
+	F = pow((dist - 0.35), 3) * 100;
 	vecF = vSectionHyper(startP, endP, dist);
-	//printf("dist: %lf %lf %lf %lf \n",dist, vecF.x, vecF.y, vecF.z);
 	vecF = vecF * F;
 	return vecF;
 }
@@ -434,7 +419,7 @@ vec3 Fe(float dist, vec3 startP, vec3 endP) {
 vec3 Fn(float dist, vec3 startP, vec3 endP) {
 	float F;
 	vec3 vecF;
-	F = log(dist) - 1;
+	F = log(dist) - 1.5;
 	if (F > 0) F = 0;
 	vecF= vSectionHyper(startP, endP, dist);
 	vecF = vecF * F;
@@ -448,7 +433,7 @@ vec3 Fo(vec3 startP) {
 	if (!(dist > FLT_MIN)) {
 		return vec3(0, 0, 0);
 	}
-	F = dist * 30;
+	F = dist * 40; //30
 	vecF = vSectionHyper(startP, vec3(0, 0, 1), dist);
 	vecF=vecF* F;
 	return vecF;
@@ -463,11 +448,8 @@ bool firstStart = false;
 void dinSim(double dt) {
 	for (int i = 0; i < VERTICES_NUM; i++) {
 		vec3 vi = graph.verticesV[i];
-		//printf("...............................................\n");
-		//printf("[%d]. %f, %f, %f\n", i, vi.x, vi.y, vi.z);
-		
 		vec3 Fi = vec3(0,0,0);
-		//printf("Fi: [%d]. %f, %f, %f\n", i, Fi.x, Fi.y, Fi.z);
+
 		for (int j = 0; j < VERTICES_NUM; j++) {
 			if (i != j) {
 				for (size_t z = 0; z < graph.lines.size(); z++) {
@@ -476,14 +458,12 @@ void dinSim(double dt) {
 
 						if (graph.lines[z].used) {
 							vec3 newF = Fe(distanceHyper(graph.vertices[i], graph.vertices[j]), graph.vertices[i], graph.vertices[j]);
-							//printf("%lf, %lf, %lf\n",  newF.x, newF.y, newF.z);
 							if (abs(newF.x) > FLT_MIN && abs(newF.y) > FLT_MIN && abs(newF.z) > FLT_MIN) {
 								Fi = Fi + newF;
 							}
 						}
 						else { 
 							vec3 newF = Fn(distanceHyper(graph.vertices[i], graph.vertices[j]), graph.vertices[i], graph.vertices[j]);
-							//printf("%lf, %lf, %lf\n", newF.x, newF.y, newF.z);
 							if (abs(newF.x) > FLT_MIN && abs(newF.y) > FLT_MIN && abs(newF.z) > FLT_MIN) {
 								Fi = Fi + newF;
 							} 
@@ -492,77 +472,50 @@ void dinSim(double dt) {
 				}
 			}
 		}
-		//if (length(vi) < FLT_MIN) vi = vec3(0, 0, 0);
-		//printf("%lf %lf %lf \n", vi.x, vi.y, vi.z);
 		Fi = Fi + Fo(graph.vertices[i]);
+
+		float p = pow(length(vi), 0.2)*40;
+		//printf("%lf\n", length(vi));
 		
-		//printf("%lf \n", length(vi));
-		vec3 frictionF = vi * pow(length(vi), 2);
-		/*if (length(vi) > 1) {
-			frictionF = vi * pow(length(vi), 100);
-		} else frictionF = vi * length(vi)*2;*/
-		//vec3 frictionF = vi * length(vi)*50;
-		//frictionF = normalize(frictionF);
-		if(length(frictionF) > FLT_MIN) Fi = Fi - frictionF;
-
-
-		/*printf("%lf %lf %lf \n", Fi.x, Fi.y, Fi.z);
-		printf("dt: %lf %lf %lf \n", Fi.x*dt, Fi.y*dt, Fi.z*dt);
-		printf("vi elott: %lf %lf %lf \n", vi.x, vi.y, vi.z);*/
-		//Fi = normalize(Fi);
-
+		vec3 frictionF = vi *p;
+		Fi = Fi - frictionF;
+	
 		if (abs(Fi.x * dt) >= FLT_MIN && abs(Fi.y * dt) >= FLT_MIN && abs(Fi.z * dt) >= FLT_MIN) {
 			if (abs(vi.x) < FLT_MIN || abs(vi.y) < FLT_MIN || abs(vi.z) < FLT_MIN) {
-				//printf("baj\n");
 				vi = Fi * dt;
 				vi = normalize(vi);
 			}
 			else {
 				vi = vi + Fi * dt;
 				vi = normalize(vi);
-				//printf("x\n");
 			}
 		}
 		else if (abs(vi.x) < FLT_MIN || abs(vi.y) < FLT_MIN || abs(vi.z) < FLT_MIN) {
-			//printf("baj2\n");
-			vi.x = 0;
-			vi.y = 0;
-			vi.z = 0;
-			
+			vi.x = 0;	vi.y = 0;	vi.z = 0;
 		}
-		
-		//printf("vi utan: %lf %lf %lf \n", vi.x, vi.y, vi.z);
-		
+
 		float viLength = length(vi);
-		//printf("viL: %lf\n", viLength);
 		float dist = viLength*dt;
-		//printf("%lf\n", dist);
+
 		if (!(dist > FLT_MIN)) {
-			//graph.verticesV[i] = vec3(0,0,0);
 			graph.verticesV[i] = vi;
-			//printf("%lf\n", dist);
 			continue;
 		} 
-		//printf("%lf\n", dist);
 		
 		vec3 newPos =rSectionHyper(graph.vertices[i], vi, dist);
-		newPos.z = sqrt(1 + newPos.x * newPos.x + newPos.y * newPos.y);
-		//printf("Newpos: %lf %lf %lf = %lf\n", newPos.x, newPos.y, newPos.z, newPos.x* newPos.x + newPos.y* newPos.y - newPos.z* newPos.z);
-		//printf("---------------------------------------------------------------------\n");
-		
+		newPos.z = sqrt(1 + newPos.x * newPos.x + newPos.y * newPos.y);		
 
 		if (abs(newPos.x) > FLT_MIN && abs(newPos.y) > FLT_MIN && abs(newPos.z) > FLT_MIN) {
-			//printf("siker\n");
-			vec3 sectionPoint = rSectionHyper(graph.vertices[i], vi, dist*2);
+			vec3 sectionPoint = rSectionHyper(graph.vertices[i], vi, dist * 2);
 			graph.vertices[i] = newPos;
 			vec3 newV = vSectionHyper(newPos, sectionPoint, distanceHyper(newPos, sectionPoint)) * viLength;
-			if (abs(newV.x) > FLT_MIN && abs(newV.y) > FLT_MIN && abs(newV.z) > FLT_MIN){
+			if (abs(newV.x) > FLT_MIN && abs(newV.y) > FLT_MIN && abs(newV.z) > FLT_MIN) {
 				graph.verticesV[i] = newV;
 			}
 			else graph.verticesV[i] = vec3(0, 0, 0);
+	
 		}
-
-		glutPostRedisplay();
+		//glutPostRedisplay();
 	}
 }
 
@@ -570,10 +523,10 @@ void dinSim(double dt) {
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == ' ') {
 		KMeans();
-		glutPostRedisplay();
+		glutPostRedisplay(); // if SPACE, invalidate display, i.e. redraw
 		newStartTime = true;
 		firstStart = true;
-	}          // if d, invalidate display, i.e. redraw
+	}          
 }
 
 // Key of ASCII code released
@@ -615,7 +568,7 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	}
 }
 
-
+int n = 0;
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
@@ -633,5 +586,6 @@ void onIdle() {
 		dinSim(dt);
 		previousTime = time;
 		glutPostRedisplay();
+		printf("%d\n", n++);
 	}
 }
