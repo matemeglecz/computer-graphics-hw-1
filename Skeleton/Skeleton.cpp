@@ -82,8 +82,6 @@ unsigned int vbo[2];		// vertex buffer object
 
 
 float distanceHyper(vec3 p, vec3 q) {
-	//printf("%lf, %lf\n", q.x, p.x);
-	//printf("%lf\n", p.x * q.x + p.y * q.y - p.z * q.z);
 	return acosh((-1) * (p.x * q.x + p.y * q.y - p.z * q.z));
 }
 
@@ -155,10 +153,7 @@ public:
 				vec3 vectorR=vec3(0,0,1);
 				vectorR.x = circleR*cos(j);
 				vectorR.y = circleR*sin(j);
-				//vectorR.x = vectorR.x - center.x;
-				//vectorR.y = vectorR.y - center.y;
 				vectorR = vectorR / (float)sqrt(1 - vectorR.x * vectorR.x - vectorR.y * vectorR.y);
-				//printf("[%d]  %lf %lf %lf \n", i, vectorR.x, vectorR.y, vectorR.z);
 				vec3 p = vec3(0, 0, 1);
 
 				float dist = distanceHyper(p, vectorR);
@@ -173,7 +168,6 @@ public:
 				vec3 circlePoint=vertices[i];
 				circlePoint = mirrorHyper(circlePoint, m1);
 				circlePoint = mirrorHyper(circlePoint, m2);
-				//printf("[%d]  %lf %lf %lf = %lf\n", i, circlePoint.x, circlePoint.y, circlePoint.z, circlePoint.x * circlePoint.x + circlePoint.y * circlePoint.y - circlePoint.z * circlePoint.z);
 				circlePoints.push_back(circlePoint);
 				if (j == 0) {
 					firstPoint = circlePoint;
@@ -234,14 +228,12 @@ public:
 	}
 
 	void drawGraph() {
-		// Set color to (0, 1, 0) = green
 		int color = glGetUniformLocation(gpuProgram.getId(), "color");
 		
 		gpuProgram.setUniform(0, "isPoint"); // 1 float
 		glUniform3f(color, 1.0f, 1.0f, 0.0f); //lines are yellow
 		drawLines();
 
-		//glUniform3f(color, 1.0f, 0.0f, 1.0f); // 3 floats
 		gpuProgram.setUniform(1, "isPoint");
 		drawPoints();
 	}
@@ -254,7 +246,7 @@ Graph graph;
 vec2 vectorStart;
 
 Texture* TextureGen(vec3 point) {
-	int width = 20, height = 20;				// create checkerboard texture procedurally
+	int width = 20, height = 20;			
 	std::vector<vec4> image(width * height);
 	float r, g, b;
 	for (int y = 0; y < height; y++) {
@@ -267,7 +259,6 @@ Texture* TextureGen(vec3 point) {
 			image[y * width + x] = vec4(r, g, b, 1);
 		}
 	}
-
 	return  new Texture(width, height, image);
 }
 
@@ -276,7 +267,7 @@ void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
 
 	glGenVertexArrays(1, &vao);	// get 1 vao id
-	glGenBuffers(2, vbo);	// Generate 1 buffer
+	glGenBuffers(2, vbo);	
 	
 	graph = Graph();
 
@@ -393,16 +384,6 @@ void graphMove(float cx, float cy) {
 		{				
 			graph.vertices[i] = mirrorHyper(graph.vertices[i], m1);
 			graph.vertices[i] = mirrorHyper(graph.vertices[i], m2);
-			//printf("%d. %lf, %lf, %lf\t = %lf\n", i, graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
-			/*temp = mirrorHyper(temp, m1);
-			temp = mirrorHyper(temp, m2);
-
-			if (!(abs(temp.x) < FLT_MIN || abs(temp.y) < FLT_MIN || abs(temp.z) < FLT_MIN))
-				graph.vertices[i] = temp;
-			else printf("baj\n");*/
-
-
-			//printf("%lf, %lf, %lf\t = %lf\n", graph.vertices[i].x, graph.vertices[i].y, graph.vertices[i].z, (graph.vertices[i].x * graph.vertices[i].x + graph.vertices[i].y * graph.vertices[i].y - graph.vertices[i].z * graph.vertices[i].z));
 		}
 	}
 }
@@ -410,7 +391,7 @@ void graphMove(float cx, float cy) {
 vec3 Fe(float dist, vec3 startP, vec3 endP) {
 	float F;
 	vec3 vecF;
-	F = pow((dist - 0.35), 3) * 100;
+	F = pow((dist - 0.4), 3) * 10000;
 	vecF = vSectionHyper(startP, endP, dist);
 	vecF = vecF * F;
 	return vecF;
@@ -419,7 +400,7 @@ vec3 Fe(float dist, vec3 startP, vec3 endP) {
 vec3 Fn(float dist, vec3 startP, vec3 endP) {
 	float F;
 	vec3 vecF;
-	F = log(dist) - 1.5;
+	F = (log(dist) - 1.6)*100;
 	if (F > 0) F = 0;
 	vecF= vSectionHyper(startP, endP, dist);
 	vecF = vecF * F;
@@ -433,7 +414,7 @@ vec3 Fo(vec3 startP) {
 	if (!(dist > FLT_MIN)) {
 		return vec3(0, 0, 0);
 	}
-	F = dist * 40; //30
+	F = dist * 4000; 
 	vecF = vSectionHyper(startP, vec3(0, 0, 1), dist);
 	vecF=vecF* F;
 	return vecF;
@@ -474,8 +455,7 @@ void dinSim(double dt) {
 		}
 		Fi = Fi + Fo(graph.vertices[i]);
 
-		float p = pow(length(vi), 0.2)*40;
-		//printf("%lf\n", length(vi));
+		float p = pow(length(vi), 0.8)*40;
 		
 		vec3 frictionF = vi *p;
 		Fi = Fi - frictionF;
@@ -513,9 +493,8 @@ void dinSim(double dt) {
 				graph.verticesV[i] = newV;
 			}
 			else graph.verticesV[i] = vec3(0, 0, 0);
-	
 		}
-		//glutPostRedisplay();
+		glutPostRedisplay();
 	}
 }
 
@@ -540,8 +519,6 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	float cY = 1.0f - 2.0f * pY / windowHeight;
 	graphMove(cX, cY);
 	
-	
-	//printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
 	glutPostRedisplay();
 }
 
@@ -560,15 +537,8 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	case GLUT_UP:   buttonStat = "released"; break;
 	}
 	pressedButton = button;
-
-	switch (button) {
-	case GLUT_LEFT_BUTTON:   printf("Left button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);   break;
-	case GLUT_MIDDLE_BUTTON: printf("Middle button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY); break;
-	case GLUT_RIGHT_BUTTON:  printf("Right button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);  break;
-	}
 }
 
-int n = 0;
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
@@ -580,12 +550,10 @@ void onIdle() {
 	}
 
 	//dinSim(time - previousTime);
-	double T = 10000;
+	double T = 300;
 	if (time < startTime+T && firstStart) {
-		double dt = (time - previousTime) / (double)1000;
+		double dt = (time - previousTime) / (double)150;
 		dinSim(dt);
 		previousTime = time;
-		glutPostRedisplay();
-		printf("%d\n", n++);
 	}
 }
